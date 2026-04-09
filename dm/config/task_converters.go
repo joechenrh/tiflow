@@ -30,6 +30,57 @@ import (
 	"go.uber.org/zap"
 )
 
+func openAPIMariaDBCompatToTaskConfig(apiCfg *openapi.TaskMariaDBCompatConfig) MariaDBCompatConfig {
+	cfg := DefaultMariaDBCompatConfig()
+	if apiCfg == nil {
+		return cfg
+	}
+	if apiCfg.Mode != nil {
+		cfg.Mode = string(*apiCfg.Mode)
+	}
+	if apiCfg.EnabledRules != nil {
+		cfg.EnabledRules = append([]string(nil), (*apiCfg.EnabledRules)...)
+	}
+	if apiCfg.DisabledRules != nil {
+		cfg.DisabledRules = append([]string(nil), (*apiCfg.DisabledRules)...)
+	}
+	if apiCfg.StrictMode != nil {
+		strictMode := *apiCfg.StrictMode
+		cfg.StrictMode = &strictMode
+	}
+	return cfg
+}
+
+func taskConfigMariaDBCompatToOpenAPI(cfg MariaDBCompatConfig) *openapi.TaskMariaDBCompatConfig {
+	defaultCfg := DefaultMariaDBCompatConfig()
+	if cfg.Mode == defaultCfg.Mode &&
+		len(cfg.EnabledRules) == 0 &&
+		len(cfg.DisabledRules) == 0 &&
+		((cfg.StrictMode == nil && defaultCfg.StrictMode == nil) ||
+			(cfg.StrictMode != nil && defaultCfg.StrictMode != nil && *cfg.StrictMode == *defaultCfg.StrictMode)) {
+		return nil
+	}
+
+	apiCfg := &openapi.TaskMariaDBCompatConfig{}
+	if cfg.Mode != "" {
+		mode := openapi.TaskMariaDBCompatConfigMode(cfg.Mode)
+		apiCfg.Mode = &mode
+	}
+	if len(cfg.EnabledRules) > 0 {
+		rules := append([]string(nil), cfg.EnabledRules...)
+		apiCfg.EnabledRules = &rules
+	}
+	if len(cfg.DisabledRules) > 0 {
+		rules := append([]string(nil), cfg.DisabledRules...)
+		apiCfg.DisabledRules = &rules
+	}
+	if cfg.StrictMode != nil {
+		strictMode := *cfg.StrictMode
+		apiCfg.StrictMode = &strictMode
+	}
+	return apiCfg
+}
+
 // TaskConfigToSubTaskConfigs generates sub task configs by TaskConfig.
 func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBConfig) ([]*SubTaskConfig, error) {
 	cfgs := make([]*SubTaskConfig, len(c.MySQLInstances))
@@ -57,6 +108,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
 		cfg.CollationCompatible = c.CollationCompatible
+		cfg.MariaDBCompat = c.MariaDBCompat
 		cfg.Experimental = c.Experimental
 
 		fromClone := dbCfg.Clone()
@@ -153,6 +205,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		// set task name and mode
 		subTaskCfg.Name = task.Name
 		subTaskCfg.Mode = string(task.TaskMode)
+		subTaskCfg.MariaDBCompat = openAPIMariaDBCompatToTaskConfig(task.MariadbCompat)
 		// set task meta
 		subTaskCfg.MetaSchema = *task.MetaSchema
 		// add binlog meta
@@ -381,6 +434,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.OnlineDDLScheme = stCfg0.OnlineDDLScheme
 	c.CleanDumpFile = stCfg0.CleanDumpFile
 	c.CollationCompatible = stCfg0.CollationCompatible
+	c.MariaDBCompat = stCfg0.MariaDBCompat
 	c.MySQLInstances = make([]*MySQLInstance, 0, len(stCfgs))
 	c.BAList = make(map[string]*filter.Rules)
 	c.Routes = make(map[string]*router.TableRule)
@@ -665,6 +719,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		Name:                      oneSubtaskConfig.Name,
 		TaskMode:                  openapi.TaskTaskMode(oneSubtaskConfig.Mode),
 		EnhanceOnlineSchemaChange: oneSubtaskConfig.OnlineDDL,
+		MariadbCompat:             taskConfigMariaDBCompatToOpenAPI(oneSubtaskConfig.MariaDBCompat),
 		MetaSchema:                &oneSubtaskConfig.MetaSchema,
 		OnDuplicate:               openapi.TaskOnDuplicate(oneSubtaskConfig.LoaderConfig.OnDuplicateLogical),
 		SourceConfig:              taskSourceConfig,

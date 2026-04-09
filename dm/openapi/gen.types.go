@@ -78,6 +78,15 @@ const (
 	TaskFullMigrateConfOnDuplicatePhysicalNone TaskFullMigrateConfOnDuplicatePhysical = "none"
 )
 
+// Defines values for TaskMariaDBCompatConfigMode.
+const (
+	TaskMariaDBCompatConfigModeAuto TaskMariaDBCompatConfigMode = "auto"
+
+	TaskMariaDBCompatConfigModeOff TaskMariaDBCompatConfigMode = "off"
+
+	TaskMariaDBCompatConfigModeOn TaskMariaDBCompatConfigMode = "on"
+)
+
 // Defines values for TaskStage.
 const (
 	TaskStageFinished TaskStage = "Finished"
@@ -537,6 +546,9 @@ type Task struct {
 	// ignore precheck items
 	IgnoreCheckingItems *[]string `json:"ignore_checking_items,omitempty"`
 
+	// MariaDB schema conversion configuration
+	MariadbCompat *TaskMariaDBCompatConfig `json:"mariadb-compat,omitempty"`
+
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`
 
@@ -660,6 +672,24 @@ type TaskIncrMigrateConf struct {
 	// incremental task of concurrent
 	ReplThreads *int `json:"repl_threads,omitempty"`
 }
+
+// MariaDB schema conversion configuration
+type TaskMariaDBCompatConfig struct {
+	// rules explicitly disabled for MariaDB compatibility conversion
+	DisabledRules *[]string `json:"disabled-rules,omitempty"`
+
+	// rules explicitly enabled for MariaDB compatibility conversion
+	EnabledRules *[]string `json:"enabled-rules,omitempty"`
+
+	// controls whether MariaDB compatibility conversion is enabled
+	Mode *TaskMariaDBCompatConfigMode `json:"mode,omitempty"`
+
+	// whether to fail when a MariaDB compatibility rule cannot be applied
+	StrictMode *bool `json:"strict-mode,omitempty"`
+}
+
+// controls whether MariaDB compatibility conversion is enabled
+type TaskMariaDBCompatConfigMode string
 
 // task migrate targets
 type TaskMigrateTarget struct {

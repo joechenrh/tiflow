@@ -71,6 +71,62 @@ var (
 	}
 	`
 
+	noShardMariaDBCompatTaskJSONStr = `
+	{
+		"enhance_online_schema_change": true,
+		"mariadb-compat": {
+		  "mode": "on",
+		  "enabled-rules": ["TEXTBLOBDEFAULTS", "uuidtype"],
+		  "disabled-rules": ["COLLATION"],
+		  "strict-mode": true
+		},
+		"meta_schema": "dm_meta",
+		"name": "test",
+		"on_duplicate": "replace",
+		"source_config": {
+		  "full_migrate_conf": {
+			"data_dir": "./exported_data",
+			"export_threads": 4,
+			"import_threads": 16,
+			"import_mode": "physical",
+			"pd_addr": "127.0.0.1:2379",
+			"security": {
+			  "ssl_ca_content": "ca1",
+			  "ssl_cert_content": "cert1",
+			  "ssl_key_content": "key1",
+			  "cert_allowed_cn": ["PD1", "PD2"]
+			}
+		  },
+		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
+		  "source_conf": [{ "source_name": "mysql-replica-01" }]
+		},
+		"table_migrate_rule": [
+		  {
+			"source": {
+			  "schema": "some_db",
+			  "source_name": "mysql-replica-01",
+			  "table": "*"
+			},
+			"target": { "schema": "new_name_db", "table": "*" }
+		  }
+		],
+		"target_config": {
+		  "host": "root",
+		  "password": "123456",
+		  "port": 4000,
+		  "security": {
+		    "ssl_ca_content": "ca2",
+			"ssl_cert_content": "cert2",
+			"ssl_key_content": "key2",
+			"cert_allowed_cn": ["TiDB1", "TiDB2"]
+		  },
+		  "user": "root"
+		},
+		"task_mode": "all",
+		"strict_optimistic_shard_mode": false
+	}
+	`
+
 	noShardErrNameJSONStr = `
 	{
 		"enhance_online_schema_change": true,
@@ -177,6 +233,13 @@ var (
 func GenNoShardOpenAPITaskForTest() (openapi.Task, error) {
 	t := openapi.Task{}
 	err := json.Unmarshal([]byte(noShardTaskJSONStr), &t)
+	return t, err
+}
+
+// GenNoShardMariaDBCompatOpenAPITaskForTest generates a no-shard openapi.Task with mariadbcompat config for test.
+func GenNoShardMariaDBCompatOpenAPITaskForTest() (openapi.Task, error) {
+	t := openapi.Task{}
+	err := json.Unmarshal([]byte(noShardMariaDBCompatTaskJSONStr), &t)
 	return t, err
 }
 

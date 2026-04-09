@@ -23,10 +23,30 @@ import (
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	mariadbcompatrules "github.com/pingcap/tiflow/dm/pkg/mariadbcompat/rules"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/stretchr/testify/require"
 )
+
+func normalizeMariaDBCompatOpenAPITaskForCompare(t *openapi.Task) {
+	if t.MariadbCompat == nil {
+		return
+	}
+
+	if t.MariadbCompat.EnabledRules != nil {
+		normalized, err := mariadbcompatrules.NormalizeConfiguredRuleNames(*t.MariadbCompat.EnabledRules)
+		if err == nil {
+			t.MariadbCompat.EnabledRules = &normalized
+		}
+	}
+	if t.MariadbCompat.DisabledRules != nil {
+		normalized, err := mariadbcompatrules.NormalizeConfiguredRuleNames(*t.MariadbCompat.DisabledRules)
+		if err == nil {
+			t.MariadbCompat.DisabledRules = &normalized
+		}
+	}
+}
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 	certAllowedCn := []string{"test"}
@@ -50,6 +70,7 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 
 func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 	testNoShardTaskToSubTaskConfigs(c)
+	testNoShardMariaDBCompatTaskToSubTaskConfigs(c)
 	testShardAndFilterTaskToSubTaskConfigs(c)
 }
 
@@ -280,8 +301,42 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask2Config.IgnoreCheckingItems, check.IsNil)
 }
 
+func testNoShardMariaDBCompatTaskToSubTaskConfigs(c *check.C) {
+	task, err := fixtures.GenNoShardMariaDBCompatOpenAPITaskForTest()
+	c.Assert(err, check.IsNil)
+	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	c.Assert(err, check.IsNil)
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+	toDBCfg := &dbconfig.DBConfig{
+		Host:     task.TargetConfig.Host,
+		Port:     task.TargetConfig.Port,
+		User:     task.TargetConfig.User,
+		Password: task.TargetConfig.Password,
+		Security: &security.Security{
+			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
+			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
+		},
+	}
+
+	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	c.Assert(err, check.IsNil)
+	c.Assert(subTaskConfigList, check.HasLen, 1)
+
+	subTaskConfig := subTaskConfigList[0]
+	c.Assert(subTaskConfig.MariaDBCompat.Mode, check.Equals, MariaDBCompatModeOn)
+	c.Assert(subTaskConfig.MariaDBCompat.EnabledRules, check.DeepEquals, []string{"TextBlobDefaults", "UUIDType"})
+	c.Assert(subTaskConfig.MariaDBCompat.DisabledRules, check.DeepEquals, []string{"Collation"})
+	c.Assert(subTaskConfig.MariaDBCompat.StrictMode, check.NotNil)
+	c.Assert(*subTaskConfig.MariaDBCompat.StrictMode, check.IsTrue)
+}
+
 func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
 	testNoShardSubTaskConfigsToOpenAPITask(c)
+	testNoShardMariaDBCompatSubTaskConfigsToOpenAPITask(c)
 	testShardAndFilterSubTaskConfigsToOpenAPITask(c)
 }
 
@@ -317,6 +372,7 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
+	normalizeMariaDBCompatOpenAPITaskForCompare(&task)
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -372,6 +428,40 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
 
+	c.Assert(&task, check.DeepEquals, newTask)
+}
+
+func testNoShardMariaDBCompatSubTaskConfigsToOpenAPITask(c *check.C) {
+	task, err := fixtures.GenNoShardMariaDBCompatOpenAPITaskForTest()
+	c.Assert(err, check.IsNil)
+	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	c.Assert(err, check.IsNil)
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+	toDBCfg := &dbconfig.DBConfig{
+		Host:     task.TargetConfig.Host,
+		Port:     task.TargetConfig.Port,
+		User:     task.TargetConfig.User,
+		Password: task.TargetConfig.Password,
+		Security: &security.Security{
+			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
+			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
+		},
+	}
+	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	c.Assert(err, check.IsNil)
+	c.Assert(subTaskConfigList, check.HasLen, 1)
+
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
+
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
+	c.Assert(taskList, check.HasLen, 1)
+	newTask := taskList[0]
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -451,6 +541,24 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		task2, err3 := TaskConfigToOpenAPITask(taskCfg2, sourceCfgMap)
 		require.NoError(t, err3)
 		require.Equal(t, batch, *task2.SourceConfig.IncrMigrateConf.ReplBatch)
+	}
+
+	{
+		taskWithMariaDBCompat, err := fixtures.GenNoShardMariaDBCompatOpenAPITaskForTest()
+		require.NoError(t, err)
+
+		taskCfg, err := OpenAPITaskToTaskConfig(&taskWithMariaDBCompat, sourceCfgMap)
+		require.NoError(t, err)
+		require.Equal(t, MariaDBCompatModeOn, taskCfg.MariaDBCompat.Mode)
+		require.Equal(t, []string{"TextBlobDefaults", "UUIDType"}, taskCfg.MariaDBCompat.EnabledRules)
+		require.Equal(t, []string{"Collation"}, taskCfg.MariaDBCompat.DisabledRules)
+		require.NotNil(t, taskCfg.MariaDBCompat.StrictMode)
+		require.True(t, *taskCfg.MariaDBCompat.StrictMode)
+
+		taskAfterConvert, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		normalizeMariaDBCompatOpenAPITaskForCompare(&taskWithMariaDBCompat)
+		require.EqualValues(t, taskAfterConvert, &taskWithMariaDBCompat)
 	}
 
 	// test update route

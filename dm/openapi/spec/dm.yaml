@@ -944,7 +944,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
 
-  /api/v1/tasks/converters:
+  /api/v1/tasks/rewriters:
     post:
       tags:
         - task
@@ -1829,6 +1829,35 @@ components:
           type: string
           example: "5m0s"
           description: "sets the time interval for adjusting the waiting time of the automatic recovery."
+    TaskMariaDBCompatConfig:
+      type: object
+      description: "MariaDB schema conversion configuration"
+      properties:
+        mode:
+          type: string
+          example: "auto"
+          description: "controls whether MariaDB compatibility conversion is enabled"
+          enum:
+            - "auto"
+            - "on"
+            - "off"
+        strict-mode:
+          type: boolean
+          example: false
+          default: false
+          description: "whether to fail when a MariaDB compatibility rule cannot be applied"
+        enabled-rules:
+          type: array
+          description: "rules explicitly enabled for MariaDB compatibility conversion"
+          items:
+            type: string
+            example: "collation"
+        disabled-rules:
+          type: array
+          description: "rules explicitly disabled for MariaDB compatibility conversion"
+          items:
+            type: string
+            example: "uuid-default"
     TaskStage:
       type: string
       enum:
@@ -1905,6 +1934,8 @@ components:
           items:
             type: string
             example: "version"
+        mariadb-compat:
+          $ref: "#/components/schemas/TaskMariaDBCompatConfig"
       required:
         - "name"
         - "task_mode"
